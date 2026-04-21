@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AeroTrace Hub — EBBY / EBCI</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+–navy:   #0A1628;
+–blue:   #0D3B6E;
+–sky:    #1B6CA8;
+–cyan:   #00B4D8;
+–white:  #F0F4F8;
+–silver: #94A3B8;
+–green:  #10B981;
+–orange: #F59E0B;
+–red:    #EF4444;
+–dark:   #060E1A;
+–panel:  #0D1F36;
+–border: rgba(0,180,216,0.15);
+–flarm:  #A78BFA;
+–adsb:   #34D399;
+–ogn:    #FCD34D;
+/* Airspace colors */
+–ctr:    #EF4444;
+–tma:    #F59E0B;
+–cta:    #3B82F6;
+–restr:  #EC4899;
+–danger: #F97316;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:‘Sora’,sans-serif;background:var(–dark);color:var(–white)}
+button{cursor:pointer;border:none;background:none;font-family:inherit}
+#app{display:flex;height:100vh}
+
+/* SIDEBAR */
+#sidebar{width:210px;flex-shrink:0;background:var(–navy);border-right:1px solid var(–border);display:flex;flex-direction:column;z-index:10}
+.logo{padding:1rem 1.1rem;border-bottom:1px solid var(–border);display:flex;align-items:center;gap:.55rem;font-size:.88rem;font-weight:800;letter-spacing:.15em}
+.logo-dot{width:7px;height:7px;border-radius:50%;background:var(–cyan);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,229,255,.5)}50%{box-shadow:0 0 0 5px rgba(0,229,255,0)}}
+.logo span{color:var(–cyan)}
+.nav-sec{padding:.4rem .8rem .15rem;font-size:.6rem;font-weight:700;letter-spacing:.14em;color:var(–silver);text-transform:uppercase;margin-top:.35rem}
+.nav-item{display:flex;align-items:center;gap:.65rem;padding:.55rem .85rem;margin:.06rem .45rem;border-radius:6px;font-size:.8rem;font-weight:600;color:var(–silver);cursor:pointer;transition:all .15s;position:relative}
+.nav-item:hover{background:rgba(0,180,216,.08);color:var(–white)}
+.nav-item.active{background:rgba(0,180,216,.15);color:var(–cyan)}
+.nav-item.active::before{content:’’;position:absolute;left:0;top:20%;height:60%;width:3px;background:var(–cyan);border-radius:0 3px 3px 0}
+.nav-badge{margin-left:auto;font-size:.6rem;font-weight:700;padding:.1rem .32rem;border-radius:100px;background:var(–red);color:#fff}
+.nav-badge.g{background:var(–green)}
+.sidebar-foot{margin-top:auto;padding:.7rem;border-top:1px solid var(–border)}
+.club-pill{display:flex;align-items:center;gap:.55rem;padding:.4rem .5rem}
+.club-av{width:30px;height:30px;border-radius:6px;background:linear-gradient(135deg,#1B6CA8,#0D3B6E);display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:800;flex-shrink:0}
+.club-name{font-size:.75rem;font-weight:700}
+.club-sub{font-size:.63rem;color:var(–silver)}
+
+/* MAIN */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* TOPBAR */
+#topbar{height:50px;flex-shrink:0;background:var(–navy);border-bottom:1px solid var(–border);display:flex;align-items:center;padding:0 1.1rem;gap:.7rem}
+.tb-title{font-size:.88rem;font-weight:700;flex:1}
+.tb-pill{display:flex;align-items:center;gap:.32rem;background:rgba(0,180,216,.07);border:1px solid var(–border);padding:.2rem .6rem;border-radius:100px;font-size:.7rem;white-space:nowrap}
+.tb-dot{width:5px;height:5px;border-radius:50%}
+.tb-clock{font-family:‘JetBrains Mono’,monospace;font-size:.73rem;color:var(–silver);margin-left:auto}
+
+/* DASHBOARD */
+#page-dashboard{flex:1;display:flex;overflow:hidden}
+.map-col{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+
+/* KPI strip */
+.kpi-strip{display:flex;gap:.55rem;padding:.55rem .75rem;background:rgba(10,22,40,.97);border-bottom:1px solid var(–border);flex-shrink:0;z-index:5}
+.kpi{background:var(–panel);border:1px solid var(–border);border-radius:7px;padding:.42rem .7rem;flex:1;min-width:0}
+.kpi-label{font-size:.57rem;font-weight:700;letter-spacing:.09em;color:var(–silver);text-transform:uppercase}
+.kpi-val{font-size:1.3rem;font-weight:800;font-family:‘JetBrains Mono’,monospace;line-height:1.15}
+.g{color:var(–green)}.r{color:var(–red)}.c{color:var(–cyan)}.o{color:var(–orange)}
+.kpi-sub{font-size:.6rem;color:var(–silver);margin-top:.06rem}
+
+/* MAP */
+#map{flex:1;width:100%}
+
+/* Overlays */
+.ov{position:absolute;z-index:5;pointer-events:none}
+.ov.i{pointer-events:all}
+
+/* Map controls top-left */
+#ctrl-styles{top:.65rem;left:.65rem;display:flex;gap:.28rem}
+.ms{background:rgba(10,22,40,.9);border:1px solid var(–border);color:var(–silver);font-size:.63rem;font-weight:700;padding:.2rem .5rem;border-radius:5px;cursor:pointer;transition:all .15s}
+.ms:hover,.ms.on{background:rgba(0,180,216,.15);color:var(–cyan);border-color:rgba(0,180,216,.35)}
+
+/* 3D toggle */
+#ctrl-3d{top:.65rem;left:50%;transform:translateX(-50%);background:rgba(10,22,40,.9);border:1px solid var(–border);color:var(–silver);font-size:.63rem;font-weight:700;padding:.2rem .65rem;border-radius:100px;cursor:pointer;transition:all .15s}
+#ctrl-3d:hover,#ctrl-3d.on{color:var(–cyan);border-color:var(–cyan)}
+
+/* Source filters top-right */
+#ctrl-sources{top:.65rem;right:.65rem;display:flex;gap:.28rem}
+.sf{display:flex;align-items:center;gap:.26rem;background:rgba(10,22,40,.9);border:1px solid rgba(148,163,184,.18);padding:.2rem .5rem;border-radius:100px;font-size:.63rem;font-weight:700;cursor:pointer;transition:all .15s;color:var(–silver)}
+.sf.on-own{border-color:var(–cyan);color:var(–cyan)}
+.sf.on-flarm{border-color:var(–flarm);color:var(–flarm)}
+.sf.on-adsb{border-color:var(–adsb);color:var(–adsb)}
+.sf.on-ogn{border-color:var(–ogn);color:var(–ogn)}
+.sf-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+
+/* Airspace toggle */
+#ctrl-airspace{top:2.35rem;right:.65rem;display:flex;gap:.28rem;margin-top:.32rem}
+
+/* Live badge */
+#live-badge{bottom:2.35rem;left:.65rem;display:flex;align-items:center;gap:.32rem;background:rgba(10,22,40,.9);border:1px solid rgba(16,185,129,.3);padding:.25rem .6rem;border-radius:100px;font-size:.65rem;font-weight:700;color:var(–green)}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(–green);animation:pulse 1.2s infinite}
+
+/* AC count */
+#ac-count{bottom:2.35rem;left:50%;transform:translateX(-50%);background:rgba(10,22,40,.9);border:1px solid var(–border);padding:.24rem .65rem;border-radius:100px;font-size:.65rem;color:var(–silver);white-space:nowrap;font-family:‘JetBrains Mono’,monospace}
+#ac-count b{color:var(–white)}
+
+/* Airspace legend */
+#airspace-legend{bottom:2.35rem;right:.65rem;background:rgba(10,22,40,.9);border:1px solid var(–border);border-radius:8px;padding:.5rem .7rem;display:flex;flex-direction:column;gap:.28rem;font-size:.63rem}
+.al-row{display:flex;align-items:center;gap:.4rem;color:var(–silver)}
+.al-swatch{width:20px;height:3px;border-radius:2px;flex-shrink:0}
+
+/* API bar */
+#api-bar{bottom:0;left:0;right:0;display:flex;align-items:center;gap:.5rem;padding:.22rem .75rem;background:rgba(6,14,26,.95);border-top:1px solid var(–border);font-size:.6rem;color:var(–silver)}
+.api-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.api-note{margin-left:auto;color:rgba(148,163,184,.35);font-style:italic}
+
+/* SIDE PANEL */
+.side-panel{width:290px;flex-shrink:0;background:var(–navy);border-left:1px solid var(–border);display:flex;flex-direction:column;overflow:hidden}
+.sp-tabs{display:flex;border-bottom:1px solid var(–border);flex-shrink:0}
+.sp-tab{flex:1;padding:.5rem;font-size:.7rem;font-weight:700;color:var(–silver);text-align:center;cursor:pointer;transition:all .15s;border-bottom:2px solid transparent}
+.sp-tab.active{color:var(–cyan);border-bottom-color:var(–cyan)}
+.sp-body{flex:1;overflow-y:auto;padding:.6rem}
+.sp-hdr{font-size:.62rem;color:var(–silver);margin-bottom:.5rem;font-family:‘JetBrains Mono’,monospace;line-height:1.4}
+
+/* Traffic item */
+.t-item{background:var(–panel);border:1px solid var(–border);border-radius:7px;padding:.5rem .7rem;margin-bottom:.4rem;cursor:pointer;transition:border-color .15s;display:grid;grid-template-columns:auto 1fr auto;gap:.5rem;align-items:center}
+.t-item:hover,.t-item.sel{border-color:rgba(0,180,216,.4)}
+.t-icon{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0}
+.t-cs{font-size:.74rem;font-weight:700;font-family:‘JetBrains Mono’,monospace}
+.t-meta{font-size:.6rem;color:var(–silver)}
+.t-alt{font-size:.7rem;font-weight:600;font-family:‘JetBrains Mono’,monospace;text-align:right}
+.t-spd{font-size:.6rem;color:var(–silver);text-align:right}
+.src-tag{font-size:.55rem;font-weight:700;padding:.06rem .26rem;border-radius:3px;display:inline-block}
+.st-flarm{background:rgba(167,139,250,.15);color:var(–flarm)}
+.st-adsb{background:rgba(52,211,153,.15);color:var(–adsb)}
+.st-ogn{background:rgba(252,211,77,.12);color:var(–ogn)}
+.st-own{background:rgba(0,180,216,.15);color:var(–cyan)}
+
+/* Airspace list */
+.as-item{background:var(–panel);border:1px solid var(–border);border-radius:7px;padding:.5rem .7rem;margin-bottom:.4rem}
+.as-name{font-size:.76rem;font-weight:700;margin-bottom:.18rem}
+.as-row{display:flex;justify-content:space-between;font-size:.65rem;color:var(–silver);margin:.1rem 0}
+.as-row b{color:var(–white);font-weight:600}
+.as-class{font-size:.58rem;font-weight:700;padding:.08rem .3rem;border-radius:3px;display:inline-block;margin-bottom:.2rem}
+.ac-ctr{background:rgba(239,68,68,.15);color:var(–ctr)}
+.ac-tma{background:rgba(245,158,11,.15);color:var(–tma)}
+.ac-cta{background:rgba(59,130,246,.15);color:var(–cta)}
+.ac-restr{background:rgba(236,72,153,.15);color:var(–restr)}
+.ac-danger{background:rgba(249,115,22,.15);color:var(–danger)}
+
+/* Alert item */
+.a-item{background:var(–panel);border:1px solid var(–border);border-radius:7px;padding:.55rem .7rem;margin-bottom:.4rem;display:flex;gap:.5rem;cursor:pointer;transition:border-color .15s}
+.a-item:hover{border-color:rgba(0,180,216,.3)}
+.a-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:.18rem}
+.a-dot.r{background:var(–red);box-shadow:0 0 5px rgba(239,68,68,.5)}
+.a-dot.o{background:var(–orange)}
+.a-dot.c{background:var(–cyan)}
+.a-title{font-size:.74rem;font-weight:600}
+.a-sub{font-size:.64rem;color:var(–silver);margin-top:.08rem}
+.a-time{font-size:.61rem;color:var(–silver);font-family:‘JetBrains Mono’,monospace;margin-left:auto;flex-shrink:0}
+
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:rgba(148,163,184,.2);border-radius:2px}
+
+/* Mapbox popup */
+.mapboxgl-popup-content{background:rgba(10,22,40,.97)!important;border:1px solid var(–border)!important;border-radius:8px!important;padding:.65rem .85rem!important;box-shadow:0 8px 28px rgba(0,0,0,.55)!important;font-family:‘Sora’,sans-serif!important;min-width:175px}
+.mapboxgl-popup-tip{border-top-color:rgba(10,22,40,.97)!important;border-bottom-color:rgba(10,22,40,.97)!important}
+.mapboxgl-popup-close-button{color:var(–silver)!important;font-size:1rem!important}
+.pop-cs{font-family:‘JetBrains Mono’,monospace;font-weight:700;font-size:.83rem;color:var(–cyan);margin-bottom:.3rem}
+.pop-row{display:flex;justify-content:space-between;gap:.75rem;font-size:.7rem;color:var(–silver);margin:.1rem 0}
+.pop-row b{color:var(–white);font-weight:600}
+.pop-src{font-size:.58rem;font-weight:700;padding:.08rem .32rem;border-radius:3px;display:inline-block;margin-top:.28rem}
+.pop-as-name{font-size:.78rem;font-weight:700;margin-bottom:.3rem;color:var(–orange)}
+
+/* Toast */
+#toast{position:fixed;top:.8rem;right:.8rem;z-index:200;background:var(–navy);border-left:3px solid var(–red);border-radius:8px;padding:.65rem .9rem;display:flex;align-items:center;gap:.55rem;box-shadow:0 8px 24px rgba(0,0,0,.5);transform:translateX(130%);transition:transform .3s;max-width:260px}
+#toast.show{transform:translateX(0)}
+</style>
+
+</head>
+<body>
+<div id="app">
+
+<!-- SIDEBAR -->
+
+<nav id="sidebar">
+  <div class="logo"><div class="logo-dot"></div>AERO<span>TRACE</span></div>
+  <div class="nav-sec">Operations</div>
+  <div class="nav-item active"><span>🗺️</span> Live Map <span class="nav-badge g">3</span></div>
+  <div class="nav-item"><span>🔔</span> Alerts <span class="nav-badge">2</span></div>
+  <div class="nav-item"><span>✈️</span> Fleet</div>
+  <div class="nav-sec">Training</div>
+  <div class="nav-item"><span>📋</span> Logbooks</div>
+  <div class="sidebar-foot">
+    <div class="club-pill">
+      <div class="club-av">EB</div>
+      <div><div class="club-name">Aéroclub EBBY</div><div class="club-sub">Admin · Wavre · 6 aircraft</div></div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+
+<div id="main">
+  <div id="topbar">
+    <div class="tb-title">EBBY / EBCI — Live Map · SafeSky + OpenAIP</div>
+    <div class="tb-pill"><div class="tb-dot" style="background:var(--green);animation:pulse 1.5s infinite"></div><span id="tb-air">3 airborne</span></div>
+    <div class="tb-pill"><div class="tb-dot" style="background:var(--flarm)"></div><span id="tb-ext">— traffic</span></div>
+    <div class="tb-pill"><div class="tb-dot" style="background:var(--orange)"></div><span id="tb-as">— airspaces</span></div>
+    <div class="tb-pill"><div class="tb-dot r"></div><span>1 alert</span></div>
+    <div class="tb-clock" id="clock">--:--:--</div>
+  </div>
+
+  <div id="page-dashboard">
+    <div class="map-col">
+
+```
+  <!-- KPIs -->
+  <div class="kpi-strip">
+    <div class="kpi"><div class="kpi-label">Airborne</div><div class="kpi-val g">3</div><div class="kpi-sub">of 6 · EBBY</div></div>
+    <div class="kpi"><div class="kpi-label">SafeSky Traffic</div><div class="kpi-val c" id="k-ext">—</div><div class="kpi-sub">25 nm vicinity</div></div>
+    <div class="kpi"><div class="kpi-label">Airspaces</div><div class="kpi-val o" id="k-as">—</div><div class="kpi-sub">CTR/TMA active</div></div>
+    <div class="kpi"><div class="kpi-label">Alert</div><div class="kpi-val r">1</div><div class="kpi-sub">OO-GXD · RPM</div></div>
+    <div class="kpi"><div class="kpi-label">Avg Alt.</div><div class="kpi-val" style="color:var(--sky)" id="k-alt">—</div><div class="kpi-sub">fleet · live</div></div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map"></div>
+
+  <!-- Map style switcher -->
+  <div class="ov i" id="ctrl-styles" style="position:absolute;top:.65rem;left:.65rem">
+    <button class="ms on" onclick="setStyle('dark',this)">Dark</button>
+    <button class="ms" onclick="setStyle('satellite',this)">Satellite</button>
+    <button class="ms" onclick="setStyle('streets',this)">Streets</button>
+  </div>
+
+  <!-- 3D toggle -->
+  <button class="ov i" id="ctrl-3d" style="position:absolute;top:.65rem;left:50%;transform:translateX(-50%)" onclick="toggle3D(this)">🌐 2D</button>
+
+  <!-- Source filters -->
+  <div class="ov i" id="ctrl-sources" style="position:absolute;top:.65rem;right:.65rem">
+    <div class="sf on-own" id="sf-own" onclick="toggleSource('own')"><div class="sf-dot" style="background:var(--cyan)"></div>Own</div>
+    <div class="sf on-flarm" id="sf-flarm" onclick="toggleSource('flarm')"><div class="sf-dot" style="background:var(--flarm)"></div>FLARM</div>
+    <div class="sf on-adsb" id="sf-adsb" onclick="toggleSource('adsb')"><div class="sf-dot" style="background:var(--adsb)"></div>ADS-B</div>
+    <div class="sf on-ogn" id="sf-ogn" onclick="toggleSource('ogn')"><div class="sf-dot" style="background:var(--ogn)"></div>OGN</div>
+  </div>
+
+  <!-- Airspace toggles -->
+  <div class="ov i" id="ctrl-airspace" style="position:absolute;top:2.4rem;right:.65rem;display:flex;gap:.28rem">
+    <div class="sf on-own" id="as-ctr" onclick="toggleAirspace('ctr')" style="border-color:var(--ctr);color:var(--ctr)">CTR</div>
+    <div class="sf on-own" id="as-tma" onclick="toggleAirspace('tma')" style="border-color:var(--tma);color:var(--tma)">TMA</div>
+    <div class="sf on-own" id="as-cta" onclick="toggleAirspace('cta')" style="border-color:var(--cta);color:var(--cta)">CTA</div>
+    <div class="sf on-own" id="as-restr" onclick="toggleAirspace('restr')" style="border-color:var(--restr);color:var(--restr)">P/R/D</div>
+  </div>
+
+  <!-- Live badge -->
+  <div class="ov" style="position:absolute;bottom:2.4rem;left:.65rem;display:flex;align-items:center;gap:.32rem;background:rgba(10,22,40,.9);border:1px solid rgba(16,185,129,.3);padding:.25rem .6rem;border-radius:100px;font-size:.65rem;font-weight:700;color:var(--green)">
+    <div class="live-dot"></div>LIVE 1Hz
+  </div>
+
+  <!-- AC count -->
+  <div class="ov" style="position:absolute;bottom:2.4rem;left:50%;transform:translateX(-50%);background:rgba(10,22,40,.9);border:1px solid var(--border);padding:.24rem .65rem;border-radius:100px;font-size:.65rem;color:var(--silver);white-space:nowrap;font-family:'JetBrains Mono',monospace">
+    Own: <b>3</b> · SafeSky: <b id="ext-cnt">…</b> · Airspace: <b id="as-cnt">…</b>
+  </div>
+
+  <!-- Airspace legend -->
+  <div class="ov" style="position:absolute;bottom:2.4rem;right:.65rem;background:rgba(10,22,40,.9);border:1px solid var(--border);border-radius:8px;padding:.5rem .7rem;display:flex;flex-direction:column;gap:.28rem;font-size:.62rem">
+    <div style="display:flex;align-items:center;gap:.4rem;color:var(--ctr)"><div style="width:18px;height:3px;background:var(--ctr);border-radius:2px"></div>CTR</div>
+    <div style="display:flex;align-items:center;gap:.4rem;color:var(--tma)"><div style="width:18px;height:3px;background:var(--tma);border-radius:2px;border:1px dashed var(--tma)"></div>TMA</div>
+    <div style="display:flex;align-items:center;gap:.4rem;color:var(--cta)"><div style="width:18px;height:3px;background:var(--cta);border-radius:2px"></div>CTA</div>
+    <div style="display:flex;align-items:center;gap:.4rem;color:var(--restr)"><div style="width:18px;height:3px;background:var(--restr);border-radius:2px"></div>P/R/D</div>
+    <div style="display:flex;align-items:center;gap:.4rem;color:var(--flarm)">▲ FLARM</div>
+    <div style="display:flex;align-items:center;gap:.4rem;color:var(--adsb)">■ ADS-B</div>
+    <div style="display:flex;align-items:center;gap:.4rem;color:var(--ogn)">○ OGN</div>
+  </div>
+
+  <!-- API bar -->
+  <div class="ov" style="position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;gap:.5rem;padding:.22rem .75rem;background:rgba(6,14,26,.95);border-top:1px solid var(--border);font-size:.6rem;color:var(--silver)">
+    <div class="api-dot" id="api-dot1" style="width:5px;height:5px;border-radius:50%;background:var(--orange)"></div>
+    <span>SafeSky:</span><span id="api-txt1" style="color:var(--white)">Mock</span>
+    <div style="width:1px;height:10px;background:var(--border);margin:0 .2rem"></div>
+    <div class="api-dot" id="api-dot2" style="width:5px;height:5px;border-radius:50%;background:var(--orange)"></div>
+    <span>OpenAIP:</span><span id="api-txt2" style="color:var(--white)">Mock · Belgian airspace</span>
+    <span id="api-ts" style="font-family:'JetBrains Mono',monospace;margin-left:.5rem"></span>
+    <span style="margin-left:auto;color:rgba(148,163,184,.35);font-style:italic">Set MOCK=false + API keys to go live</span>
+  </div>
+</div>
+
+<!-- SIDE PANEL -->
+<div class="side-panel">
+  <div class="sp-tabs">
+    <div class="sp-tab active" id="tab-traffic" onclick="switchTab('traffic')">Traffic</div>
+    <div class="sp-tab" id="tab-airspace" onclick="switchTab('airspace')">Airspace</div>
+    <div class="sp-tab" id="tab-alerts" onclick="switchTab('alerts')">Alerts</div>
+  </div>
+
+  <div class="sp-body" id="tc-traffic">
+    <div class="sp-hdr" id="traffic-hdr">Loading SafeSky…</div>
+    <div id="traffic-list"></div>
+  </div>
+
+  <div class="sp-body" id="tc-airspace" style="display:none">
+    <div class="sp-hdr" id="airspace-hdr">Loading OpenAIP…</div>
+    <div id="airspace-list"></div>
+  </div>
+
+  <div class="sp-body" id="tc-alerts" style="display:none">
+    <div class="a-item"><div class="a-dot r"></div><div><div class="a-title">RPM Overspeed</div><div class="a-sub">OO-GXD · 2450 RPM (limit 2300)</div></div><div class="a-time">14:32</div></div>
+    <div class="a-item"><div class="a-dot o"></div><div><div class="a-title">G-force +2.8g</div><div class="a-sub">OO-GXD · climb near EBCI CTR</div></div><div class="a-time">14:28</div></div>
+    <div class="a-item"><div class="a-dot o"></div><div><div class="a-title">CO elevated 18 ppm</div><div class="a-sub">OO-HBC (landed EBBY)</div></div><div class="a-time">13:41</div></div>
+    <div class="a-item"><div class="a-dot c"></div><div><div class="a-title">Entering TMA Brussels</div><div class="a-sub">OO-JAB · FL065 · cleared</div></div><div class="a-time">13:22</div></div>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+</div>
+
+<!-- Toast -->
+
+<div id="toast">
+  <div>⚠️</div>
+  <div><div style="font-size:.78rem;font-weight:700">RPM Overspeed — OO-GXD</div><div style="font-size:.66rem;color:var(--silver)">2 450 RPM · Limit 2 300 · Near EBCI CTR</div></div>
+  <div onclick="this.closest('#toast').classList.remove('show')" style="margin-left:auto;color:var(--silver);cursor:pointer;font-size:.85rem">✕</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  OPENAIP MODULE (mock Belgian airspace)
+//  Replace MOCK=false + API_KEY to get live data from:
+//  GET https://api.openaip.net/api/airspaces?country=BE
+// ═══════════════════════════════════════════════════════════
+const OpenAIP = (() => {
+  const API_KEY  = 'YOUR_OPENAIP_API_KEY';
+  const BASE_URL = 'https://api.openaip.net/api';
+  const MOCK     = true;
+
+  // Helper: generate circle polygon [lng,lat]
+  function circle(lat, lon, radiusNm, pts = 48) {
+    const R = radiusNm * 1852;
+    const coords = [];
+    for (let i = 0; i <= pts; i++) {
+      const a  = (i / pts) * 2 * Math.PI;
+      const dLat = (R * Math.cos(a)) / 111320;
+      const dLon = (R * Math.sin(a)) / (111320 * Math.cos(lat * Math.PI / 180));
+      coords.push([lon + dLon, lat + dLat]);
+    }
+    return coords;
+  }
+
+  // Helper: polygon from corner coords (approximate)
+  function poly(coords) { return [...coords, coords[0]]; }
+
+  // Belgian airspace mock data — geometries approximate but representative
+  const AIRSPACES = [
+    // ── CTRs ──────────────────────────────────────────────
+    {
+      id: 'EBBR-CTR', name: 'BRUSSELS CTR', type: 'CTR', class: 'C',
+      lowerAlt: 'SFC', upperAlt: '3500 ft AMSL',
+      geometry: { type:'Polygon', coordinates:[circle(50.90, 4.48, 8)] }
+    },
+    {
+      id: 'EBCI-CTR', name: 'CHARLEROI CTR', type: 'CTR', class: 'D',
+      lowerAlt: 'SFC', upperAlt: '2500 ft AMSL',
+      geometry: { type:'Polygon', coordinates:[circle(50.46, 4.45, 6)] }
+    },
+    {
+      id: 'EBLE-CTR', name: 'LIEGE CTR', type: 'CTR', class: 'D',
+      lowerAlt: 'SFC', upperAlt: '2500 ft AMSL',
+      geometry: { type:'Polygon', coordinates:[circle(50.64, 5.44, 5.5)] }
+    },
+    {
+      id: 'EBAW-CTR', name: 'ANTWERP CTR', type: 'CTR', class: 'D',
+      lowerAlt: 'SFC', upperAlt: '2500 ft AMSL',
+      geometry: { type:'Polygon', coordinates:[circle(51.19, 4.46, 5)] }
+    },
+    // ── TMAs ──────────────────────────────────────────────
+    {
+      id: 'EBBR-TMA1', name: 'BRUSSELS TMA 1', type: 'TMA', class: 'C',
+      lowerAlt: 'FL065', upperAlt: 'FL195',
+      geometry: { type:'Polygon', coordinates:[circle(50.90, 4.48, 30)] }
+    },
+    {
+      id: 'EBBR-TMA2', name: 'BRUSSELS TMA 2', type: 'TMA', class: 'C',
+      lowerAlt: '3500 ft', upperAlt: 'FL065',
+      geometry: { type:'Polygon', coordinates:[circle(50.90, 4.48, 18)] }
+    },
+    {
+      id: 'EBCI-TMA', name: 'CHARLEROI TMA', type: 'TMA', class: 'E',
+      lowerAlt: '2500 ft', upperAlt: 'FL095',
+      geometry: { type:'Polygon', coordinates:[circle(50.46, 4.45, 20)] }
+    },
+    // ── CTA ───────────────────────────────────────────────
+    {
+      id: 'EBBR-CTA', name: 'BRUSSELS CTA', type: 'CTA', class: 'C',
+      lowerAlt: 'FL195', upperAlt: 'FL245',
+      geometry: { type:'Polygon', coordinates:[circle(50.85, 4.50, 50)] }
+    },
+    // ── Restricted / Prohibited ────────────────────────────
+    {
+      id: 'EBP-LAEKEN', name: 'EBP 1 LAEKEN', type: 'P', class: 'P',
+      lowerAlt: 'SFC', upperAlt: '2500 ft AMSL',
+      geometry: { type:'Polygon', coordinates:[circle(50.88, 4.36, 1.8)] }
+    },
+    {
+      id: 'EBR-003', name: 'EBR 3 NAMUR', type: 'R', class: 'R',
+      lowerAlt: 'SFC', upperAlt: '3500 ft AMSL',
+      geometry: { type:'Polygon', coordinates:[circle(50.47, 4.87, 4)] }
+    },
+    {
+      id: 'EBD-007', name: 'EBD 7 FLORENNES', type: 'D', class: 'D',
+      lowerAlt: 'SFC', upperAlt: 'FL100',
+      geometry: { type:'Polygon', coordinates:[circle(50.24, 4.65, 7)] }
+    },
+  ];
+
+  async function fetchAirspaces(country = 'BE') {
+    if (MOCK) {
+      await new Promise(r => setTimeout(r, 200));
+      return { airspaces: AIRSPACES };
+    }
+    const res = await fetch(
+      `${BASE_URL}/airspaces?country=${country}&limit=100`,
+      { headers: { 'x-openaip-api-key': API_KEY, Accept: 'application/json' } }
+    );
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+
+  return { fetchAirspaces, MOCK, AIRSPACES };
+})();
+
+// ═══════════════════════════════════════════════════════════
+//  SAFESKY MODULE (mock Belgian vicinity)
+// ═══════════════════════════════════════════════════════════
+const SafeSky = (() => {
+  const API_KEY  = 'YOUR_SAFESKY_API_KEY';
+  const BASE_URL = 'https://api.safesky.app/v1';
+  const MOCK     = true;
+
+  const TEMPLATES = [
+    { cs:'OO-ALB', src:'FLARM', type:'Glider' },
+    { cs:'OO-DKA', src:'FLARM', type:'Motorglider' },
+    { cs:'D-KABC', src:'FLARM', type:'Glider' },
+    { cs:'OO-VKA', src:'ADS-B', type:'GA' },
+    { cs:'PH-GHI', src:'ADS-B', type:'GA' },
+    { cs:'BAW123', src:'ADS-B', type:'Airliner' },
+    { cs:'BEL256', src:'ADS-B', type:'Airliner' },
+    { cs:'OO-SLW', src:'OGN',   type:'Paramotor' },
+    { cs:'OO-YTA', src:'FLARM', type:'Ultralight' },
+    { cs:'F-GNOP', src:'OGN',   type:'Motorglider' },
+    { cs:'LX-PAX', src:'ADS-B', type:'GA' },
+    { cs:'OO-ZYX', src:'FLARM', type:'Glider' },
+  ];
+
+  function mock(lat, lon, r) {
+    const spread = r * 0.018;
+    const t = Date.now() / 1000;
+    return {
+      timestamp: Date.now(),
+      aircraft: TEMPLATES.map((tmpl, i) => {
+        const a = t * 0.035 + i * (Math.PI * 2 / TEMPLATES.length);
+        const d = spread * (0.2 + (i % 5) * 0.18);
+        return {
+          id: tmpl.src + i,
+          callsign: tmpl.cs,
+          lat: lat + Math.sin(a) * d,
+          lon: lon + Math.cos(a) * d * 1.5,
+          altitude_ft: Math.round(500 + Math.sin(t*0.06 + i*1.1)*2500 + i*180),
+          speed_kt: Math.round(40 + Math.sin(t*0.04 + i)*60),
+          heading: Math.round((t*4 + i*30) % 360),
+          vertical_speed_fpm: Math.round(Math.sin(t*0.08 + i)*450),
+          source: tmpl.src,
+          ac_type: tmpl.type,
+        };
+      })
+    };
+  }
+
+  async function fetchVicinity(lat, lon, radiusNm = 25) {
+    if (MOCK) { await new Promise(r => setTimeout(r, 100)); return mock(lat, lon, radiusNm); }
+    const res = await fetch(
+      `${BASE_URL}/vicinity?lat=${lat}&lon=${lon}&radius_nm=${radiusNm}`,
+      { headers: { Authorization: `Bearer ${API_KEY}`, Accept: 'application/json' } }
+    );
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+  return { fetchVicinity, MOCK };
+})();
+
+// ═══════════════════════════════════════════════════════════
+//  MAPBOX INIT — centered on EBBY (Wavre)
+// ═══════════════════════════════════════════════════════════
+mapboxgl.accessToken = 'pk.eyJ1IjoiY2Vya2VucyIsImEiOiJjbW85NHB2cmMwNGhzMnJxdjgzNXZxb3JiIn0.MzbiOcP1PSwPnKEdO4T0jg';
+
+// EBBY = 50.7167N, 4.6167E  /  EBCI = 50.4592N, 4.4531E
+const HOME = { lat: 50.59, lon: 4.53 }; // midpoint EBBY/EBCI
+
+const STYLES = {
+  dark:      'mapbox://styles/mapbox/dark-v11',
+  satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+  streets:   'mapbox://styles/mapbox/streets-v12',
+};
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: STYLES.dark,
+  center: [HOME.lon, HOME.lat],
+  zoom: 9.2,
+  pitch: 0,
+  bearing: 0,
+  attributionControl: false,
+});
+
+map.addControl(new mapboxgl.NavigationControl({ visualizePitch:true }), 'bottom-right');
+map.addControl(new mapboxgl.ScaleControl({ unit:'nautical', maxWidth:120 }), 'bottom-left');
+
+// ── Own fleet (Belgian registrations) ──────────────────────
+const OWN_FLEET = [
+  { id:'OO-GXD', type:'C172', pilot:'Dupont J.', color:'#EF4444', rpm:'2450 ⚠', lat:50.72, lon:4.62, hdg:195, alt:2400, spd:90,  vspd:350 },
+  { id:'OO-HBC', type:'DA40', pilot:'Martin L.', color:'#10B981', rpm:'2150 ✓', lat:50.55, lon:4.38, hdg:280, alt:3200, spd:92,  vspd:-100 },
+  { id:'OO-JAB', type:'C172', pilot:'Lecomte P.',color:'#00B4D8', rpm:'2200 ✓', lat:50.48, lon:4.68, hdg:55,  alt:1950, spd:75,  vspd:180 },
+];
+
+const t0 = Date.now();
+function ownPos(ac) {
+  const s  = (Date.now() - t0) / 1000;
+  return {
+    lat: ac.lat + Math.sin(s*0.08 + ac.hdg*0.017)*0.012,
+    lon: ac.lon + Math.cos(s*0.07 + ac.hdg*0.017)*0.018,
+    alt: ac.alt + Math.round(Math.sin(s*0.06)*120),
+  };
+}
+
+function ownGeoJSON() {
+  return { type:'FeatureCollection', features: OWN_FLEET.map(ac => {
+    const p = ownPos(ac);
+    return { type:'Feature',
+      geometry:{ type:'Point', coordinates:[p.lon, p.lat] },
+      properties:{ id:ac.id, callsign:ac.id, color:ac.color, source:'OWN',
+        altitude:p.alt, speed:ac.spd, heading:ac.hdg, vspd:ac.vspd,
+        rpm:ac.rpm, pilot:ac.pilot, type:ac.type } };
+  })};
+}
+
+// ── Airspace GeoJSON ───────────────────────────────────────
+const AS_COLORS = { CTR:'#EF4444', TMA:'#F59E0B', CTA:'#3B82F6', P:'#EC4899', R:'#EC4899', D:'#F97316' };
+
+function airspaceGeoJSON(airspaces, typeFilter) {
+  return { type:'FeatureCollection', features: airspaces
+    .filter(a => activeAirspace[typeToKey(a.type)])
+    .map(a => ({ type:'Feature',
+      geometry: a.geometry,
+      properties:{ id:a.id, name:a.name, type:a.type, class:a.class,
+        lower:a.lowerAlt, upper:a.upperAlt, color: AS_COLORS[a.type] || '#94A3B8' }
+    }))
+  };
+}
+
+function typeToKey(t) {
+  if(t==='CTR') return 'ctr';
+  if(t==='TMA') return 'tma';
+  if(t==='CTA') return 'cta';
+  return 'restr';
+}
+
+function skGeoJSON(aircraft) {
+  return { type:'FeatureCollection', features: aircraft
+    .filter(ac => { const k = ac.source==='ADS-B'?'adsb':ac.source.toLowerCase(); return activeSrc[k]; })
+    .map(ac => ({ type:'Feature',
+      geometry:{ type:'Point', coordinates:[ac.lon, ac.lat] },
+      properties:{ id:ac.id, callsign:ac.callsign,
+        color: {'FLARM':'#A78BFA','ADS-B':'#34D399','OGN':'#FCD34D'}[ac.source]||'#94A3B8',
+        source:ac.source, altitude:ac.altitude_ft, speed:ac.speed_kt,
+        heading:ac.heading, vspd:ac.vertical_speed_fpm, ac_type:ac.ac_type }
+    }))
+  };
+}
+
+// ── State ──────────────────────────────────────────────────
+let mapReady    = false;
+let extTraffic  = [];
+let airspaces   = [];
+const activeSrc = { own:true, flarm:true, adsb:true, ogn:true };
+const activeAirspace = { ctr:true, tma:true, cta:true, restr:true };
+const popup = new mapboxgl.Popup({ closeButton:true, maxWidth:'230px', offset:15 });
+
+// ── Map load ───────────────────────────────────────────────
+map.on('load', async () => {
+  mapReady = true;
+
+  // Airfield markers: EBBY and EBCI
+  [
+    { lon:4.6167, lat:50.7167, name:'EBBY', sub:'Wavre · 925 ft' },
+    { lon:4.4531, lat:50.4592, name:'EBCI', sub:'Charleroi · 614 ft' },
+  ].forEach(af => {
+    const el = document.createElement('div');
+    el.style.cssText = `width:36px;height:36px;display:flex;flex-direction:column;align-items:center;cursor:default`;
+    el.innerHTML = `
+      <div style="width:10px;height:10px;border:2px solid #00E5FF;border-radius:2px;transform:rotate(45deg);background:rgba(0,229,255,.15)"></div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:#00E5FF;margin-top:2px;white-space:nowrap">${af.name}</div>
+      <div style="font-size:7px;color:#94A3B8;white-space:nowrap">${af.sub}</div>`;
+    new mapboxgl.Marker({ element:el, anchor:'center' }).setLngLat([af.lon, af.lat]).addTo(map);
+  });
+
+  // ── AIRSPACE LAYERS (OpenAIP mock) ─────────────────────
+  const asData = await OpenAIP.fetchAirspaces('BE');
+  airspaces = asData.airspaces;
+  document.getElementById('k-as').textContent = airspaces.length;
+  document.getElementById('as-cnt').innerHTML = `<b>${airspaces.length}</b>`;
+  renderAirspaceList(airspaces);
+
+  map.addSource('airspaces', { type:'geojson', data: airspaceGeoJSON(airspaces) });
+
+  // Fill layer (semi-transparent)
+  map.addLayer({ id:'as-fill', type:'fill', source:'airspaces',
+    paint:{ 'fill-color':['get','color'], 'fill-opacity':0.06 }
+  });
+  // Stroke layer
+  map.addLayer({ id:'as-line', type:'line', source:'airspaces',
+    paint:{
+      'line-color':['get','color'],
+      'line-width':['case',['==',['get','type'],'TMA'],1.2,1.8],
+      'line-opacity':0.75,
+      'line-dasharray':['case',['==',['get','type'],'TMA'],['literal',[5,3]],['literal',[1]]],
+    }
+  });
+  // Airspace labels
+  map.addLayer({ id:'as-label', type:'symbol', source:'airspaces',
+    layout:{
+      'text-field':['concat',['get','name'],'\n',['get','lower'],' → ',['get','upper']],
+      'text-font':['DIN Offc Pro Medium','Arial Unicode MS Regular'],
+      'text-size':9, 'text-anchor':'center',
+      'symbol-placement':'point',
+    },
+    paint:{ 'text-color':['get','color'], 'text-opacity':0.75,
+      'text-halo-color':'#060E1A','text-halo-width':1.5 }
+  });
+
+  // Click on airspace
+  map.on('click','as-fill', e => {
+    const p = e.features[0].properties;
+    popup.setLngLat(e.lngLat).setHTML(`
+      <div class="pop-as-name">${p.name}</div>
+      <div class="pop-row"><span>Class</span><b>${p.class}</b></div>
+      <div class="pop-row"><span>Type</span><b>${p.type}</b></div>
+      <div class="pop-row"><span>Lower</span><b>${p.lower}</b></div>
+      <div class="pop-row"><span>Upper</span><b>${p.upper}</b></div>
+    `).addTo(map);
+    switchTab('airspace');
+    highlightAirspace(p.id);
+  });
+  map.on('mouseenter','as-fill', () => map.getCanvas().style.cursor='pointer');
+  map.on('mouseleave','as-fill', () => map.getCanvas().style.cursor='');
+
+  // ── TRAFFIC LAYERS ─────────────────────────────────────
+  map.addSource('own-fleet', { type:'geojson', data:ownGeoJSON() });
+  map.addLayer({ id:'own-pulse', type:'circle', source:'own-fleet',
+    paint:{ 'circle-radius':14, 'circle-color':['get','color'],
+      'circle-opacity':0.1, 'circle-stroke-width':1, 'circle-stroke-color':['get','color'], 'circle-stroke-opacity':0.3 }
+  });
+  map.addLayer({ id:'own-dot', type:'circle', source:'own-fleet',
+    paint:{ 'circle-radius':7, 'circle-color':['get','color'],
+      'circle-opacity':0.85, 'circle-stroke-width':2, 'circle-stroke-color':['get','color'] }
+  });
+  map.addLayer({ id:'own-label', type:'symbol', source:'own-fleet',
+    layout:{ 'text-field':['get','callsign'], 'text-font':['DIN Offc Pro Medium','Arial Unicode MS Regular'],
+      'text-size':10, 'text-offset':[0,1.5], 'text-anchor':'top' },
+    paint:{ 'text-color':['get','color'],'text-halo-color':'#060E1A','text-halo-width':1.5 }
+  });
+
+  map.addSource('safesky', { type:'geojson', data:{ type:'FeatureCollection', features:[] } });
+  map.addLayer({ id:'sk-flarm', type:'circle', source:'safesky',
+    filter:['==',['get','source'],'FLARM'],
+    paint:{ 'circle-radius':5,'circle-color':'#A78BFA','circle-opacity':0.85,'circle-stroke-width':1.5,'circle-stroke-color':'#A78BFA' }
+  });
+  map.addLayer({ id:'sk-adsb', type:'circle', source:'safesky',
+    filter:['==',['get','source'],'ADS-B'],
+    paint:{ 'circle-radius':5,'circle-color':'#34D399','circle-opacity':0.85,'circle-stroke-width':1.5,'circle-stroke-color':'#34D399' }
+  });
+  map.addLayer({ id:'sk-ogn', type:'circle', source:'safesky',
+    filter:['==',['get','source'],'OGN'],
+    paint:{ 'circle-radius':5,'circle-color':'rgba(252,211,77,0)','circle-stroke-width':2,'circle-stroke-color':'#FCD34D' }
+  });
+  map.addLayer({ id:'sk-label', type:'symbol', source:'safesky',
+    layout:{ 'text-field':['get','callsign'],'text-font':['DIN Offc Pro Medium','Arial Unicode MS Regular'],
+      'text-size':9,'text-offset':[0,1.3],'text-anchor':'top' },
+    paint:{ 'text-color':['get','color'],'text-opacity':0.8,'text-halo-color':'#060E1A','text-halo-width':1.5 }
+  });
+
+  // Click own fleet
+  ['own-dot','own-pulse'].forEach(l => {
+    map.on('click', l, e => {
+      const p = e.features[0].properties;
+      const isAlert = p.rpm && p.rpm.includes('⚠');
+      popup.setLngLat(e.lngLat).setHTML(`
+        <div class="pop-cs">${p.callsign}</div>
+        <div class="pop-row"><span>Type</span><b>${p.type}</b></div>
+        <div class="pop-row"><span>Pilot</span><b>${p.pilot}</b></div>
+        <div class="pop-row"><span>Altitude</span><b>${Number(p.altitude).toLocaleString()} ft</b></div>
+        <div class="pop-row"><span>Speed</span><b>${p.speed} kt</b></div>
+        <div class="pop-row"><span>Heading</span><b>${p.heading}°</b></div>
+        <div class="pop-row"><span>RPM</span><b style="color:${isAlert?'var(--orange)':'var(--green)'}">${p.rpm}</b></div>
+        <span class="pop-src st-own">OWN FLEET</span>
+      `).addTo(map);
+    });
+    map.on('mouseenter', l, () => map.getCanvas().style.cursor='pointer');
+    map.on('mouseleave', l, () => map.getCanvas().style.cursor='');
+  });
+
+  // Click SafeSky
+  ['sk-flarm','sk-adsb','sk-ogn'].forEach(l => {
+    map.on('click', l, e => {
+      const p  = e.features[0].properties;
+      const sk = p.source==='FLARM'?'st-flarm':p.source==='ADS-B'?'st-adsb':'st-ogn';
+      const vs = p.vspd > 50 ? '↑' : p.vspd < -50 ? '↓' : '→';
+      popup.setLngLat(e.lngLat).setHTML(`
+        <div class="pop-cs" style="color:${p.color}">${p.callsign}</div>
+        <div class="pop-row"><span>Type</span><b>${p.ac_type}</b></div>
+        <div class="pop-row"><span>Altitude</span><b>${Number(p.altitude).toLocaleString()} ft</b></div>
+        <div class="pop-row"><span>Speed</span><b>${p.speed} kt</b></div>
+        <div class="pop-row"><span>Heading</span><b>${p.heading}°</b></div>
+        <div class="pop-row"><span>Vert. speed</span><b>${vs} ${Math.abs(p.vspd)} fpm</b></div>
+        <span class="pop-src ${sk}">${p.source}</span>
+      `).addTo(map);
+      highlightListItem(p.id);
+    });
+    map.on('mouseenter', l, () => map.getCanvas().style.cursor='pointer');
+    map.on('mouseleave', l, () => map.getCanvas().style.cursor='');
+  });
+
+  // API status
+  document.getElementById('api-dot2').style.background = 'var(--orange)';
+  document.getElementById('api-txt2').textContent = `Mock · ${airspaces.length} Belgian airspaces`;
+  document.getElementById('api-txt1').textContent = SafeSky.MOCK ? 'Mock' : 'Live';
+
+  startPolling();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  POLLING
+// ═══════════════════════════════════════════════════════════
+async function poll() {
+  if (!mapReady) return;
+
+  // Own fleet
+  if (activeSrc.own) {
+    map.getSource('own-fleet')?.setData(ownGeoJSON());
+    const alts = OWN_FLEET.map(ac => ownPos(ac).alt);
+    document.getElementById('k-alt').textContent = Math.round(alts.reduce((s,v)=>s+v)/alts.length).toLocaleString() + ' ft';
+  }
+
+  // SafeSky
+  try {
+    const data  = await SafeSky.fetchVicinity(HOME.lat, HOME.lon, 25);
+    extTraffic  = data.aircraft;
+    map.getSource('safesky')?.setData(skGeoJSON(extTraffic));
+
+    const vis = extTraffic.filter(ac => { const k=ac.source==='ADS-B'?'adsb':ac.source.toLowerCase(); return activeSrc[k]; }).length;
+    document.getElementById('k-ext').textContent = vis;
+    document.getElementById('ext-cnt').innerHTML = `<b>${vis}</b>`;
+    document.getElementById('tb-ext').textContent = vis + ' traffic';
+    document.getElementById('api-ts').textContent = new Date().toTimeString().slice(0,8);
+    renderTrafficList(extTraffic);
+  } catch(e) {
+    document.getElementById('api-dot1').style.background = 'var(--red)';
+  }
+}
+function startPolling() { poll(); setInterval(poll, 1000); }
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER LISTS
+// ═══════════════════════════════════════════════════════════
+function renderTrafficList(aircraft) {
+  const fl=aircraft.filter(a=>a.source==='FLARM').length;
+  const ad=aircraft.filter(a=>a.source==='ADS-B').length;
+  const og=aircraft.filter(a=>a.source==='OGN').length;
+  document.getElementById('traffic-hdr').textContent =
+    `${aircraft.length} aircraft in 25 nm · FLARM:${fl} ADS-B:${ad} OGN:${og}`;
+
+  const SRC_COLORS = {'FLARM':'#A78BFA','ADS-B':'#34D399','OGN':'#FCD34D'};
+  document.getElementById('traffic-list').innerHTML = aircraft
+    .filter(ac => { const k=ac.source==='ADS-B'?'adsb':ac.source.toLowerCase(); return activeSrc[k]; })
+    .map(ac => {
+      const c  = SRC_COLORS[ac.source]||'#94A3B8';
+      const sc = ac.source==='FLARM'?'st-flarm':ac.source==='ADS-B'?'st-adsb':'st-ogn';
+      const vs = ac.vertical_speed_fpm;
+      const arrow = vs>50?'↑':vs<-50?'↓':'→';
+      const ico  = ac.source==='FLARM'?'▲':ac.source==='ADS-B'?'■':'○';
+      return `<div class="t-item" id="li-${ac.id}" onclick="flyTo(${ac.lon},${ac.lat},'${ac.id}')">
+        <div class="t-icon" style="background:${c}18;color:${c};font-size:.68rem">${ico}</div>
+        <div><div class="t-cs" style="color:${c}">${ac.callsign}</div>
+          <div class="t-meta">${ac.ac_type} <span class="src-tag ${sc}">${ac.source}</span></div></div>
+        <div><div class="t-alt">${ac.altitude_ft.toLocaleString()} ft ${arrow}</div>
+          <div class="t-spd">${ac.speed_kt} kt · ${ac.heading}°</div></div>
+      </div>`;
+    }).join('');
+}
+
+function renderAirspaceList(airspaces) {
+  document.getElementById('airspace-hdr').textContent =
+    `${airspaces.length} airspaces · Belgium (OpenAIP mock)`;
+  const AS_COLORS = { CTR:'#EF4444', TMA:'#F59E0B', CTA:'#3B82F6', P:'#EC4899', R:'#EC4899', D:'#F97316' };
+  const CLASS_CSS = { CTR:'ac-ctr', TMA:'ac-tma', CTA:'ac-cta', P:'ac-restr', R:'ac-restr', D:'ac-danger' };
+  document.getElementById('airspace-list').innerHTML = airspaces.map(as => `
+    <div class="as-item" id="as-${as.id}" onclick="flyToAirspace('${as.id}')">
+      <span class="as-class ${CLASS_CSS[as.type]||'ac-ctr'}">${as.type} ${as.class}</span>
+      <div class="as-name" style="color:${AS_COLORS[as.type]||'#94A3B8'}">${as.name}</div>
+      <div class="as-row"><span>Lower</span><b>${as.lowerAlt}</b></div>
+      <div class="as-row"><span>Upper</span><b>${as.upperAlt}</b></div>
+    </div>`).join('');
+
+  document.getElementById('tb-as').textContent = airspaces.length + ' airspaces';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════════════════
+function flyTo(lon, lat, id) {
+  map.flyTo({ center:[lon,lat], zoom:11, duration:800 });
+  highlightListItem(id);
+}
+function flyToAirspace(id) {
+  const as = OpenAIP.AIRSPACES.find(a => a.id===id);
+  if(!as) return;
+  // get centroid-ish from first coord
+  const coords = as.geometry.coordinates[0];
+  const cx = coords.reduce((s,c)=>s+c[0],0)/coords.length;
+  const cy = coords.reduce((s,c)=>s+c[1],0)/coords.length;
+  map.flyTo({ center:[cx,cy], zoom:9.5, duration:900 });
+  highlightAirspace(id);
+}
+function highlightListItem(id) {
+  document.querySelectorAll('.t-item').forEach(el=>el.classList.remove('sel'));
+  const el = document.getElementById('li-'+id);
+  if(el){ el.classList.add('sel'); el.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+}
+function highlightAirspace(id) {
+  document.querySelectorAll('.as-item').forEach(el=>el.style.borderColor='');
+  const el = document.getElementById('as-'+id);
+  if(el){ el.style.borderColor='rgba(0,180,216,.5)'; el.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+}
+
+function setStyle(name, btn) {
+  map.setStyle(STYLES[name]);
+  document.querySelectorAll('.ms').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  map.once('styledata', ()=>{ mapReady=false; map.once('idle',()=>{ map.fire('load'); }); });
+}
+
+function toggle3D(btn) {
+  const on = btn.classList.toggle('on');
+  map.easeTo({ pitch: on?52:0, bearing: on?-12:0, duration:800 });
+  btn.textContent = on ? '🌐 3D' : '🌐 2D';
+}
+
+function toggleSource(src) {
+  activeSrc[src] = !activeSrc[src];
+  const pill = document.getElementById('sf-'+src);
+  pill.className = activeSrc[src] ? `sf on-${src}` : 'sf';
+  if(src==='own' && mapReady) {
+    ['own-dot','own-pulse','own-label'].forEach(l => {
+      if(map.getLayer(l)) map.setLayoutProperty(l,'visibility',activeSrc.own?'visible':'none');
+    });
+  }
+  const layerMap = { flarm:'sk-flarm', adsb:'sk-adsb', ogn:'sk-ogn' };
+  const lbl = { flarm:'sk-label', adsb:'sk-label', ogn:'sk-label' };
+  if (src !== 'own' && mapReady && map.getLayer(layerMap[src])) {
+    map.getSource('safesky')?.setData(skGeoJSON(extTraffic));
+  }
+  renderTrafficList(extTraffic);
+}
+
+function toggleAirspace(key) {
+  activeAirspace[key] = !activeAirspace[key];
+  const pill = document.getElementById('as-'+key);
+  const colors = { ctr:'var(--ctr)', tma:'var(--tma)', cta:'var(--cta)', restr:'var(--restr)' };
+  if(activeAirspace[key]) {
+    pill.style.borderColor = colors[key];
+    pill.style.color = colors[key];
+  } else {
+    pill.style.borderColor = 'rgba(148,163,184,.18)';
+    pill.style.color = 'var(--silver)';
+  }
+  if(mapReady) map.getSource('airspaces')?.setData(airspaceGeoJSON(airspaces));
+}
+
+function switchTab(tab) {
+  ['traffic','airspace','alerts'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('active',t===tab);
+    document.getElementById('tc-'+t).style.display = t===tab?'':'none';
+  });
+}
+
+setInterval(()=>{ document.getElementById('clock').textContent=new Date().toTimeString().slice(0,8)+' UTC'; },1000);
+setTimeout(()=>{ const t=document.getElementById('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),7000); },3000);
+</script>
+
+</body>
+</html>
