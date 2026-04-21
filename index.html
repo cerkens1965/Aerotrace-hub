@@ -337,15 +337,21 @@ button{cursor:pointer;border:none;background:none;font-family:inherit}
 </div>
 
 <script>
+// OpenAIP airspace type codes → string
+function typeCodeToStr(code) {
+  const map = {0:'CTR',1:'TMA',2:'TMA',3:'CTA',4:'CTR',5:'R',6:'D',7:'P',
+               8:'TMA',9:'TMA',10:'TMA',11:'TMA',12:'TMA',13:'CTR',14:'R'};
+  return map[code] || 'CTR';
+}
 // ═══════════════════════════════════════════════════════════
 //  OPENAIP MODULE (mock Belgian airspace)
 //  Replace MOCK=false + API_KEY to get live data from:
 //  GET https://api.openaip.net/api/airspaces?country=BE
 // ═══════════════════════════════════════════════════════════
 const OpenAIP = (() => {
-  const API_KEY  = 'YOUR_OPENAIP_API_KEY';
+  const API_KEY  = 'ac134ca9a623587f3c387dab1b9e3d0e';
   const BASE_URL = 'https://api.openaip.net/api';
-  const MOCK     = true;
+  const MOCK     = false;
 
   // Helper: generate circle polygon [lng,lat]
   function circle(lat, lon, radiusNm, pts = 48) {
@@ -431,9 +437,10 @@ const OpenAIP = (() => {
       await new Promise(r => setTimeout(r, 200));
       return { airspaces: AIRSPACES };
     }
+    // OpenAIP v1 API: pass key as query param for CORS compatibility
     const res = await fetch(
-      `${BASE_URL}/airspaces?country=${country}&limit=100`,
-      { headers: { 'x-openaip-api-key': API_KEY, Accept: 'application/json' } }
+      `${BASE_URL}/airspaces?country=${country}&limit=200&apiKey=${API_KEY}`,
+      { headers: { Accept: 'application/json' } }
     );
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
@@ -618,7 +625,8 @@ map.on('load', async () => {
 
   // ── AIRSPACE LAYERS (OpenAIP mock) ─────────────────────
   const asData = await OpenAIP.fetchAirspaces('BE');
-  airspaces = asData.airspaces;
+  // OpenAIP API returns { items: [...] }
+  airspaces = asData.items || asData.airspaces || asData || [];
   document.getElementById('k-as').textContent = airspaces.length;
   document.getElementById('as-cnt').innerHTML = `<b>${airspaces.length}</b>`;
   renderAirspaceList(airspaces);
